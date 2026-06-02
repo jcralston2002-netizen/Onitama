@@ -1093,8 +1093,15 @@ function render(){ renderBoard(); renderPlayers(); renderCards(); renderStatus()
 function renderBoard(){
   const el=document.getElementById('board');
   const wrap=document.getElementById('board-wrap');
-  const size=Math.min(wrap.clientWidth,wrap.clientHeight)-20;
-  el.style.width=size+'px'; el.style.height=size+'px';
+  if(window.innerWidth > 700){
+    // Desktop: fit within both dimensions
+    const size=Math.min(wrap.clientWidth,wrap.clientHeight)-20;
+    el.style.width=size+'px'; el.style.height=size+'px';
+  } else {
+    // Mobile: use width only — never measure height to avoid toolbar resize jitter
+    const size=Math.min(wrap.clientWidth-12, 480);
+    el.style.width=size+'px'; el.style.height=size+'px';
+  }
   el.innerHTML='';
 
   for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
@@ -1338,8 +1345,14 @@ function shuffle(arr){
 }
 
 // ── BOOT ──────────────────────────────────────────────────
+// Prevent click from firing after touchend (stops double-fire on mobile)
+let _touchFired=false;
+document.addEventListener('touchend',()=>{ _touchFired=true; },true);
+document.addEventListener('click',(e)=>{ if(_touchFired){ _touchFired=false; e.stopPropagation(); } },true);
+
 window.addEventListener('load',()=>{ renderBoard(); showSetupModal(); });
-window.addEventListener('resize',()=>{ if(G) renderBoard(); });
+// Only resize board on desktop; mobile uses clientWidth-based stable sizing
+window.addEventListener('resize',()=>{ if(G&&window.innerWidth>700) renderBoard(); });
 </script>
 </body>
 </html>
