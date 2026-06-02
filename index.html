@@ -1127,8 +1127,7 @@ function renderBoard(){
     }
     if(G?.selected?.row===r&&G?.selected?.col===c) cell.classList.add('selected');
     if(G?.validMoves?.some(m=>m.row===r&&m.col===c)) cell.classList.add(G.board[r][c]?'valid-capture':'valid-move');
-    cell.addEventListener('touchstart',()=>{},{passive:true});
-    cell.addEventListener('click',()=>onCellClick(r,c));
+    cell.setAttribute('onclick',`onCellClick(${r},${c})`);
     el.appendChild(cell);
   }
 }
