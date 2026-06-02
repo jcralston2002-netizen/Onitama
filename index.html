@@ -1345,10 +1345,14 @@ function shuffle(arr){
 }
 
 // ── BOOT ──────────────────────────────────────────────────
-// Prevent click from firing after touchend (stops double-fire on mobile)
+// Prevent click from firing after touchend on cells/cards (stops double-fire on mobile)
 let _touchFired=false;
-document.addEventListener('touchend',()=>{ _touchFired=true; },true);
-document.addEventListener('click',(e)=>{ if(_touchFired){ _touchFired=false; e.stopPropagation(); } },true);
+document.addEventListener('touchend',(e)=>{
+  if(e.target.closest('.cell,.card')) _touchFired=true;
+},true);
+document.addEventListener('click',(e)=>{
+  if(_touchFired&&e.target.closest('.cell,.card')){ _touchFired=false; e.stopPropagation(); }
+},true);
 
 window.addEventListener('load',()=>{ renderBoard(); showSetupModal(); });
 // Only resize board on desktop; mobile uses clientWidth-based stable sizing
