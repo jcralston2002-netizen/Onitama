@@ -223,7 +223,7 @@ header button:hover { background:var(--border); color:#fff; }
   .el-badge { font-size:9px; padding:1px 4px; }
   .leader-ability-badge { font-size:10px; }
 
-  /* 2 — Board centered, scaled to fit screen */
+  /* 2 — Board centered, stable size based on vw only (avoids dvh resize on scroll) */
   #board-wrap {
     order: 2;
     width: 100%;
@@ -232,8 +232,10 @@ header button:hover { background:var(--border); color:#fff; }
   }
   #board {
     border-width: 5px;
-    width: min(calc(100vw - 12px), calc(100dvh - 260px));
-    height: min(calc(100vw - 12px), calc(100dvh - 260px));
+    width: calc(100vw - 12px);
+    height: calc(100vw - 12px);
+    max-width: 480px;
+    max-height: 480px;
   }
 
   /* 3 — Cards side by side at the bottom */
@@ -1119,6 +1121,7 @@ function renderBoard(){
     if(G?.selected?.row===r&&G?.selected?.col===c) cell.classList.add('selected');
     if(G?.validMoves?.some(m=>m.row===r&&m.col===c)) cell.classList.add(G.board[r][c]?'valid-capture':'valid-move');
     cell.addEventListener('click',()=>onCellClick(r,c));
+    cell.addEventListener('touchend',(e)=>{ e.preventDefault(); onCellClick(r,c); });
     el.appendChild(cell);
   }
 }
@@ -1224,7 +1227,10 @@ function renderCards(){
       grid.appendChild(gcell);
     }
     card.appendChild(grid);
-    if(cp.type==='human') card.addEventListener('click',()=>onCardClick(name));
+    if(cp.type==='human'){
+      card.addEventListener('click',()=>onCardClick(name));
+      card.addEventListener('touchend',(e)=>{ e.preventDefault(); onCardClick(name); });
+    }
     el.appendChild(card);
   });
 
