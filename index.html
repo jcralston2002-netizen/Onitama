@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Onitama: Expanded Edition</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#f0ebe0; --surface:#e8dfc8; --surface2:#ddd4b8; --border:#c4a46c;
+  --text:#2a1a08; --text-dim:#8a6535; --gold:#8b6200;
+  --c-fire:#c0392b; --c-water:#1a6fa8; --c-earth:#1e8449; --c-air:#6c3483;
+  --center:rgba(160,120,20,.2); --center-border:rgba(150,110,15,.7);
+  --valid-move:rgba(30,160,70,.38); --valid-capture:rgba(200,50,40,.44);
+  --selected:rgba(200,155,20,.5);
+  --wood-light:#d4a96a; --wood-dark:#a0703a;
+  --wood-frame:#5c3215; --wood-frame2:#7a4520;
+}
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+  font-size:14px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+header { display:flex; align-items:center; justify-content:space-between;
+  padding:8px 16px; background:var(--surface); border-bottom:2px solid var(--border); flex-shrink:0; }
+header h1 { font-size:18px; color:var(--wood-frame); letter-spacing:1px; font-weight:700; }
+#status-bar { font-size:13px; color:var(--text-dim); flex:1; text-align:center; }
+header button { background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  padding:5px 12px; border-radius:5px; cursor:pointer; font-size:12px; margin-left:6px; }
+header button:hover { background:var(--border); color:#fff; }
+
+#main { display:flex; flex:1; overflow:hidden; gap:10px; padding:10px; }
+#left-panel { display:flex; flex-direction:column; gap:8px; width:190px; flex-shrink:0; overflow-y:auto; }
+
+.player-panel { background:var(--surface); border:2px solid var(--border); border-radius:8px;
+  padding:10px; transition:border-color .2s,opacity .2s; }
+.player-panel.active { border-color:var(--gold); box-shadow:0 0 10px rgba(139,98,0,.2); }
+.player-panel.eliminated { opacity:.4; }
+.player-name { font-weight:700; font-size:13px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.player-pieces { font-size:12px; color:var(--text-dim); margin-bottom:5px; }
+.player-elements { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
+.el-badge { background:var(--surface2); border:1px solid var(--border); border-radius:4px;
+  padding:2px 5px; font-size:11px; display:flex; align-items:center; gap:2px; }
+.el-badge.t1 { border-color:#6a9a55; }
+.el-badge.t2 { border-color:#c88a00; }
+.el-badge.t3 { border-color:var(--gold); box-shadow:0 0 5px rgba(139,98,0,.35); }
+.leader-ability-badge { margin-top:5px; font-size:11px; color:var(--gold); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.eliminated-badge { margin-top:5px; font-size:10px; color:#c0392b; font-weight:700; letter-spacing:1px; }
+
+/* ── BOARD ── */
+#board-wrap { flex:1; display:flex; align-items:center; justify-content:center; min-width:0; }
+#board {
+  display:grid; grid-template-columns:repeat(11,1fr);
+  border:10px solid var(--wood-frame);
+  outline:2px solid var(--wood-frame2);
+  border-radius:6px; overflow:hidden;
+  box-shadow:
+    inset 0 2px 8px rgba(255,210,130,.25),
+    inset 0 -3px 6px rgba(0,0,0,.3),
+    0 10px 40px rgba(0,0,0,.3),
+    0 2px 8px rgba(0,0,0,.2);
+  background:var(--wood-frame);
+}
+.cell { aspect-ratio:1; position:relative; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:filter .12s; user-select:none; touch-action:manipulation; }
+.cell:hover { filter:brightness(1.14); }
+.cell-light {
+  background:
+    repeating-linear-gradient(94deg,transparent,transparent 10px,rgba(0,0,0,.025) 10px,rgba(0,0,0,.025) 11px),
+    linear-gradient(158deg,#e2b878 0%,#c89040 38%,#d8a858 58%,#c08c38 100%);
+}
+.cell-dark {
+  background:
+    repeating-linear-gradient(94deg,transparent,transparent 10px,rgba(0,0,0,.035) 10px,rgba(0,0,0,.035) 11px),
+    linear-gradient(158deg,#a87840 0%,#7e5018 38%,#9a6830 58%,#7a4a18 100%);
+}
+.cell-void { background:#221008 !important; cursor:default !important; pointer-events:none; }
+.cell-void:hover { filter:none !important; }
+.center-zone { background:var(--center) !important; outline:1px solid var(--center-border); outline-offset:-1px; }
+.center-point { background:rgba(190,150,15,.28) !important; }
+.resource-fire  { background:linear-gradient(rgba(192,57,43,.26),rgba(192,57,43,.26)),
+  linear-gradient(158deg,#e2b878,#c89040) !important; }
+.resource-water { background:linear-gradient(rgba(26,111,168,.26),rgba(26,111,168,.26)),
+  linear-gradient(158deg,#e2b878,#c89040) !important; }
+.resource-earth { background:linear-gradient(rgba(30,132,73,.26),rgba(30,132,73,.26)),
+  linear-gradient(158deg,#e2b878,#c89040) !important; }
+.resource-air   { background:linear-gradient(rgba(108,52,131,.26),rgba(108,52,131,.26)),
+  linear-gradient(158deg,#e2b878,#c89040) !important; }
+.resource-icon { position:absolute; font-size:10px; bottom:1px; right:2px; pointer-events:none; opacity:.85; }
+.throne-marker { position:absolute; inset:3px; border:2px dashed currentColor; border-radius:3px; pointer-events:none; opacity:.55; }
+
+/* ── PIECES (SVG pawn shapes) ── */
+.piece-wrap { width:72%; height:72%; position:relative; z-index:2; transition:transform .15s;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.piece-wrap.leader { width:84%; height:84%;
+  filter:drop-shadow(0 0 5px currentColor) drop-shadow(0 2px 4px rgba(0,0,0,.55)); }
+.piece-wrap.shielded::after { content:'🛡'; font-size:8px; position:absolute; bottom:-3px; right:-3px;
+  background:var(--bg); border-radius:50%; line-height:1; z-index:3; }
+
+.selected    { background-color:var(--selected) !important; }
+.valid-move  { background-color:var(--valid-move) !important; cursor:crosshair; }
+.valid-capture { background-color:var(--valid-capture) !important; cursor:crosshair; }
+
+/* ── RIGHT PANEL & CARDS ── */
+#right-panel { display:flex; flex-direction:column; gap:8px; width:230px; flex-shrink:0; overflow-y:auto; }
+#cards-area { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; }
+.cards-label { font-size:11px; color:var(--text-dim); margin-bottom:8px; font-weight:600; }
+.card { background:#fff8ee; border:2px solid var(--border); border-radius:7px; padding:8px;
+  margin-bottom:8px; cursor:pointer; transition:border-color .15s,box-shadow .15s; touch-action:manipulation; }
+.card:hover:not(.card-disabled) { box-shadow:0 2px 10px rgba(0,0,0,.14); }
+.card-selected { box-shadow:0 0 12px rgba(139,98,0,.4) !important; border-color:var(--gold) !important; }
+.card-disabled { cursor:default; opacity:.6; }
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.card-name { font-size:12px; font-weight:700; color:var(--text); }
+.card-el-tags { display:flex; gap:3px; flex-wrap:wrap; }
+.card-el-tag { font-size:9px; padding:1px 3px; border-radius:3px; color:#fff; font-weight:700; }
+.card-el-tag.fire  { background:var(--c-fire); }
+.card-el-tag.water { background:var(--c-water); }
+.card-el-tag.earth { background:var(--c-earth); }
+.card-el-tag.air   { background:var(--c-air); }
+.card-el-tag.locked { background:rgba(0,0,0,.12); color:rgba(0,0,0,.4); }
+.card-grid { display:grid; gap:1px; }
+.card-cell { aspect-ratio:1; border-radius:2px; display:flex; align-items:center; justify-content:center; font-size:7px; }
+.cc-empty  { background:rgba(0,0,0,.05); }
+.cc-origin { background:rgba(0,0,0,.2); color:#fff; }
+.cc-normal { background:rgba(40,150,60,.72); color:#fff; }
+.cc-water  { background:rgba(26,111,168,.78); color:#fff; }
+.cc-fire   { background:rgba(192,57,43,.78); color:#fff; }
+.cc-earth  { background:rgba(30,132,73,.78); color:#fff; }
+.cc-air    { background:rgba(108,52,131,.78); color:#fff; }
+.cc-locked { background:rgba(0,0,0,.06); color:rgba(0,0,0,.3); border:1px dashed rgba(0,0,0,.18); }
+.rotation-label { font-size:11px; color:var(--text-dim); margin-top:6px; }
+
+#game-log { background:var(--surface); border:1px solid var(--border); border-radius:8px;
+  padding:10px; flex:1; overflow-y:auto; font-size:11px; min-height:80px; }
+.log-entry { color:var(--text-dim); border-bottom:1px solid rgba(196,164,108,.4); padding:3px 0; }
+.log-entry:first-child { color:var(--text); }
+.section-heading { font-size:11px; color:var(--text-dim); letter-spacing:.5px; font-weight:600; margin-bottom:4px; }
+#tier-legend { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:10px; }
+#tier-legend div { margin-bottom:3px; color:var(--text-dim); }
+#tier-legend strong { color:var(--text); }
+
+/* ── MODALS ── */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex;
+  align-items:center; justify-content:center; z-index:100; }
+.modal-overlay.hidden { display:none; }
+.modal { background:var(--surface); border:2px solid var(--border); border-radius:12px; padding:28px;
+  min-width:400px; max-width:540px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+.modal h2 { color:var(--wood-frame); font-size:22px; margin-bottom:18px; letter-spacing:1px; }
+.modal label { display:block; margin-bottom:5px; font-size:13px; color:var(--text-dim); }
+.modal select { width:100%; background:#fff; border:1px solid var(--border); color:var(--text);
+  padding:7px 10px; border-radius:6px; font-size:13px; margin-bottom:12px; }
+.modal input[type=checkbox] { margin-right:6px; }
+.field-group { margin-bottom:14px; }
+.player-type-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.player-color-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+.player-name-input { flex:1; background:#fff; border:1px solid var(--border); color:var(--text);
+  padding:5px 8px; border-radius:5px; font-size:12px; }
+.btn-primary { background:var(--wood-frame); color:#f0ebe0; border:none; padding:10px 24px; border-radius:7px;
+  font-size:14px; font-weight:700; cursor:pointer; width:100%; margin-top:6px; transition:filter .15s; }
+.btn-primary:hover { filter:brightness(1.18); }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border);
+  padding:8px 18px; border-radius:7px; font-size:13px; cursor:pointer; width:100%; margin-top:6px; }
+.btn-secondary:hover { background:var(--border); color:#fff; }
+#win-modal .modal { text-align:center; }
+#win-message { color:var(--text); font-size:16px; margin:14px 0 20px; line-height:1.5; }
+
+.notification { position:fixed; top:60px; left:50%; transform:translateX(-50%) translateY(-20px);
+  background:var(--surface); border:2px solid var(--border); border-radius:10px; padding:12px 22px;
+  font-size:14px; font-weight:600; z-index:200; opacity:0; transition:opacity .3s,transform .3s;
+  max-width:440px; text-align:center; white-space:pre-line; pointer-events:none; color:var(--text); }
+.notification.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+#summon-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:50;
+  display:flex; align-items:center; justify-content:center; pointer-events:none; }
+#summon-overlay.active { pointer-events:auto; }
+#summon-overlay.hidden { display:none; }
+.summon-hint { background:var(--surface); border:2px solid var(--gold); border-radius:8px;
+  padding:12px 20px; color:var(--gold); font-size:14px; font-weight:600; }
+
+/* ── MOBILE ── */
+@media (max-width: 700px) {
+  body { height:auto; min-height:100dvh; overflow:auto; font-size:13px; }
+
+  /* Slim header */
+  header { padding:5px 8px; gap:4px; }
+  header h1 { font-size:13px; }
+  #status-bar { font-size:11px; flex:1; text-align:center; }
+  header button { padding:3px 7px; font-size:10px; margin-left:2px; }
+
+  /* Stack: players → board → cards */
+  #main {
+    flex-direction: column;
+    overflow: visible;
+    padding: 6px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* 1 — Players side by side across the top */
+  #left-panel {
+    order: 1;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow: visible;
+  }
+  #left-panel .section-heading { display:none; }
+  #tier-legend { display:none !important; }
+  #player-panels {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    width: 100%;
+  }
+  .player-panel {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+  .player-name { font-size:11px; }
+  .player-pieces { font-size:10px; }
+  .el-badge { font-size:9px; padding:1px 4px; }
+  .leader-ability-badge { font-size:10px; }
+
+  /* 2 — Board centered, scaled to fit screen */
+  #board-wrap {
+    order: 2;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  #board {
+    border-width: 5px;
+    width: min(calc(100vw - 12px), calc(100dvh - 260px));
+    height: min(calc(100vw - 12px), calc(100dvh - 260px));
+  }
+
+  /* 3 — Cards side by side at the bottom */
+  #right-panel {
+    order: 3;
+    width: 100%;
+    flex-direction: column;
+    overflow: visible;
+    gap: 4px;
+  }
+  #game-log { display:none; }
+  #cards-area { width:100%; }
+  #cards-area .cards-label { font-size:10px; margin-bottom:4px; }
+
+  /* Cards displayed in a horizontal row */
+  #cards-area > .card { display:inline-block; width:calc(50% - 4px); vertical-align:top; margin-bottom:4px; }
+  #cards-area { display:flex; flex-wrap:wrap; gap:4px; padding:6px; }
+  #cards-area > .cards-label { width:100%; }
+
+  .card { padding:5px 6px; }
+  .card-name { font-size:10px; }
+  .card-el-tag { font-size:8px; }
+  .card-cell { font-size:5px; }
+  .rotation-label { font-size:9px; }
+
+  /* Modal */
+  .modal { min-width:0; width:calc(100vw - 24px); padding:16px; }
+  .modal h2 { font-size:16px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚔ Onitama: Expanded</h1>
+  <div id="status-bar">Loading…</div>
+  <div>
+    <button onclick="showSetupModal()">New Game</button>
+    <button onclick="showTutorial()">Tutorial</button>
+    <button onclick="showRulesModal()">Rules</button>
+  </div>
+</header>
+
+<div id="main">
+  <div id="left-panel">
+    <div class="section-heading">PLAYERS</div>
+    <div id="player-panels"></div>
+    <div id="tier-legend" style="margin-top:auto">
+      <div class="section-heading" style="margin-bottom:6px">ELEMENT TIERS</div>
+      <div><strong>Tier 1</strong> — 5 tokens — unlocks card tier-1 moves</div>
+      <div><strong>Tier 2</strong> — 10 tokens — unlocks tier-1 &amp; 2 moves</div>
+      <div><strong>Tier 3</strong> — 17 tokens — all element moves unlocked</div>
+      <div style="margin-top:6px"><strong>Leader zone</strong> — move leader into central 3×3 to activate unique ability (once per game)</div>
+    </div>
+  </div>
+
+  <div id="board-wrap"><div id="board"></div></div>
+
+  <div id="right-panel">
+    <div id="cards-area"><div class="cards-label">Select a card then a piece</div></div>
+    <div class="section-heading">GAME LOG</div>
+    <div id="game-log"></div>
+  </div>
+</div>
+
+<!-- Setup -->
+<div class="modal-overlay" id="setup-modal">
+  <div class="modal">
+    <h2>⚔ New Game</h2>
+    <div class="field-group">
+      <label>Number of Players</label>
+      <select id="player-count" onchange="updateSetupForm()">
+        <option value="2">2 Players</option>
+        <option value="4">4 Players</option>
+      </select>
+    </div>
+    <div class="field-group" id="team-mode-wrap" style="display:none">
+      <label><input type="checkbox" id="team-mode"> Team Mode (2 vs 2)</label>
+    </div>
+    <div class="field-group">
+      <label>Player Setup</label>
+      <div id="player-rows"></div>
+    </div>
+    <button class="btn-primary" onclick="startGameFromModal()">Start Game</button>
+  </div>
+</div>
+
+<!-- Win -->
+<div class="modal-overlay hidden" id="win-modal">
+  <div class="modal">
+    <h2>🏆 Game Over</h2>
+    <div id="win-message"></div>
+    <button class="btn-primary" onclick="showSetupModal();document.getElementById('win-modal').classList.add('hidden')">Play Again</button>
+  </div>
+</div>
+
+<!-- Summon overlay -->
+<div id="summon-overlay" class="hidden">
+  <div class="summon-hint">Click an empty cell adjacent to your leader to summon a pawn</div>
+</div>
+
+<!-- Tutorial -->
+<div class="modal-overlay hidden" id="tutorial-modal">
+  <div class="modal" style="max-width:560px">
+    <h2>🎓 How to Play</h2>
+    <div id="tutorial-content"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-secondary" id="tut-prev" onclick="tutStep(-1)">← Back</button>
+      <button class="btn-primary"   id="tut-next" onclick="tutStep(1)">Next →</button>
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text-dim)" id="tut-counter"></div>
+  </div>
+</div>
+
+<!-- Rules -->
+<div class="modal-overlay hidden" id="rules-modal">
+  <div class="modal">
+    <h2>📜 Rules</h2>
+    <div style="font-size:13px;line-height:1.8;color:var(--text-dim)">
+      <p><strong style="color:var(--text)">Goal:</strong> Capture the enemy leader, or move your leader onto their throne (2-player).</p><br>
+      <p><strong style="color:var(--text)">Turn:</strong> Click a card → click a piece → click a highlighted cell to move. Used card enters the rotation queue.</p><br>
+      <p><strong style="color:var(--text)">Resource tiles</strong> (🔥💧🌿💨) — At your turn start, each piece that was <em>already</em> on a resource tile last turn earns 1 token. Two pieces on two same-element tiles = 2 tokens.</p><br>
+      <p><strong style="color:var(--text)">Element Tiers</strong> — unlock with 5 / 10 / 17 tokens of an element. Higher tiers include all lower ones. Unlocked tiers let you use the matching coloured move spaces shown on each card.</p><br>
+      <p><strong style="color:var(--text)">Card element moves</strong> — Cards show extra coloured dots in the move grid. Only you can use them if you have the required tier. The card header shows e.g. "💧1 🔥2" meaning it has Water tier-1 and Fire tier-2 extra spaces.</p><br>
+      <p><strong style="color:var(--text)">Leader abilities</strong> — Move your leader into the central 3×3 golden zone to activate a one-time ability:</p>
+      <p>🔴 <strong>Surge</strong> — move 2 pieces per turn for 3 turns.</p>
+      <p>🟢 <strong>Summon</strong> — instantly spawn a new pawn adjacent to your leader.</p>
+      <p>🔵 <strong>Warden's Shield</strong> — for 3 turns, pieces on resource tiles begin each turn shielded.</p>
+      <p>🟡 <strong>Leap</strong> — your leader may move twice per turn for 3 turns.</p>
+    </div>
+    <button class="btn-secondary" onclick="document.getElementById('rules-modal').classList.add('hidden')">Close</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── CONSTANTS ──────────────────────────────────────────────
+const BOARD = 11;
+const CARD_GRID_RAD = 3; // preview grid radius → 7×7
+const ELEMENTS = ['fire','water','earth','air'];
+const ELEM_ICON  = {fire:'🔥',water:'💧',earth:'🌿',air:'💨'};
+const ELEM_COLOR = {fire:'#e74c3c',water:'#3498db',earth:'#5daa44',air:'#9b59b6'};
+const TIER_AT = [3, 5, 7]; // tokens needed for tier 1, 2, 3
+
+const CENTER_ZONE = new Set(['5,5']);
+
+// 4×4 corners are void — not playable
+const BLOCKED = new Set();
+for (let r=0;r<=1;r++){
+  for(let c=0;c<=1;c++) BLOCKED.add(`${r},${c}`);
+  for(let c=9;c<=10;c++) BLOCKED.add(`${r},${c}`);
+}
+for (let r=9;r<=10;r++){
+  for(let c=0;c<=1;c++) BLOCKED.add(`${r},${c}`);
+  for(let c=9;c<=10;c++) BLOCKED.add(`${r},${c}`);
+}
+
+const RESOURCE_TILES = [
+  // Fire
+  [4,4,'fire'],[7,7,'fire'],
+  // Water
+  [3,7,'water'],[6,4,'water'],
+  // Earth
+  [3,3,'earth'],[6,6,'earth'],
+  // Air
+  [4,6,'air'],[7,3,'air'],
+];
+const RES_MAP = {};
+RESOURCE_TILES.forEach(([r,c,el])=>{ RES_MAP[`${r},${c}`]=el; });
+
+// ── CARD DEFINITIONS ───────────────────────────────────────
+// moves: card-space [r=forward, c=right]; jumps, no blocking
+// elMoves: [{el, tier, move}] — extra cells unlocked by element tiers
+const CARD_DEFS = {
+  Tiger:    { color:'#c0392b',
+    moves:[[2,0],[-1,0]],
+    elMoves:[{el:'fire',tier:1,move:[3,0]},{el:'air',tier:1,move:[-2,0]},{el:'earth',tier:2,move:[2,1]},{el:'earth',tier:2,move:[2,-1]}] },
+  Dragon:   { color:'#8e44ad',
+    moves:[[1,-2],[1,2],[-1,-1],[-1,1]],
+    elMoves:[{el:'fire',tier:1,move:[2,-1]},{el:'fire',tier:1,move:[2,1]},{el:'earth',tier:2,move:[-2,-1]},{el:'earth',tier:2,move:[-2,1]}] },
+  Frog:     { color:'#27ae60',
+    moves:[[0,-1],[1,-1],[-1,1]],
+    elMoves:[{el:'water',tier:1,move:[0,-2]},{el:'air',tier:1,move:[-1,-1]},{el:'earth',tier:2,move:[1,0]}] },
+  Rabbit:   { color:'#e67e22',
+    moves:[[0,1],[1,1],[-1,-1]],
+    elMoves:[{el:'water',tier:1,move:[0,2]},{el:'air',tier:1,move:[-1,1]},{el:'earth',tier:2,move:[1,0]}] },
+  Crab:     { color:'#16a085',
+    moves:[[1,0],[0,-2],[0,2]],
+    elMoves:[{el:'water',tier:1,move:[2,0]},{el:'air',tier:1,move:[0,-3]},{el:'air',tier:1,move:[0,3]},{el:'fire',tier:2,move:[1,-1]},{el:'fire',tier:2,move:[1,1]}] },
+  Elephant: { color:'#7f8c8d',
+    moves:[[0,-1],[0,1],[1,-1],[1,1]],
+    elMoves:[{el:'earth',tier:1,move:[-1,-1]},{el:'earth',tier:1,move:[-1,1]},{el:'fire',tier:2,move:[2,0]}] },
+  Goose:    { color:'#95a5a6',
+    moves:[[0,-1],[1,-1],[0,1],[-1,1]],
+    elMoves:[{el:'air',tier:1,move:[-1,-1]},{el:'water',tier:1,move:[0,2]},{el:'water',tier:3,move:[2,-1]},{el:'water',tier:3,move:[2,1]}] },
+  Rooster:  { color:'#d35400',
+    moves:[[0,1],[1,1],[0,-1],[-1,-1]],
+    elMoves:[{el:'air',tier:1,move:[-1,1]},{el:'water',tier:1,move:[0,-2]},{el:'air',tier:3,move:[2,1]},{el:'air',tier:3,move:[2,-1]}] },
+  Monkey:   { color:'#2980b9',
+    moves:[[1,-1],[1,1],[-1,-1],[-1,1]],
+    elMoves:[{el:'air',tier:1,move:[0,-1]},{el:'air',tier:1,move:[0,1]},{el:'earth',tier:2,move:[2,0]},{el:'water',tier:2,move:[-2,0]}] },
+  Mantis:   { color:'#c0392b',
+    moves:[[1,-1],[1,1],[-1,0]],
+    elMoves:[{el:'fire',tier:1,move:[1,0]},{el:'earth',tier:1,move:[0,-1]},{el:'earth',tier:1,move:[0,1]},{el:'earth',tier:2,move:[2,0]}] },
+  Horse:    { color:'#8e44ad',
+    moves:[[1,0],[0,-1],[-1,0]],
+    elMoves:[{el:'earth',tier:1,move:[0,1]},{el:'water',tier:1,move:[2,0]},{el:'air',tier:2,move:[-2,0]}] },
+  Ox:       { color:'#27ae60',
+    moves:[[1,0],[0,1],[-1,0]],
+    elMoves:[{el:'earth',tier:1,move:[0,-1]},{el:'water',tier:1,move:[2,0]},{el:'air',tier:2,move:[-2,0]}] },
+  Crane:    { color:'#e67e22',
+    moves:[[1,0],[-1,-1],[-1,1]],
+    elMoves:[{el:'air',tier:1,move:[-2,0]},{el:'water',tier:1,move:[2,0]},{el:'fire',tier:2,move:[1,-1]},{el:'fire',tier:2,move:[1,1]}] },
+  Boar:     { color:'#16a085',
+    moves:[[1,0],[0,-1],[0,1]],
+    elMoves:[{el:'earth',tier:1,move:[-1,0]},{el:'fire',tier:1,move:[1,-1]},{el:'fire',tier:1,move:[1,1]},{el:'water',tier:2,move:[2,0]}] },
+  Eel:      { color:'#7f8c8d',
+    moves:[[1,-1],[-1,-1],[0,1]],
+    elMoves:[{el:'earth',tier:1,move:[0,-1]},{el:'air',tier:1,move:[-1,1]},{el:'water',tier:2,move:[0,2]}] },
+  Cobra:    { color:'#e74c3c',
+    moves:[[1,1],[-1,1],[0,-1]],
+    elMoves:[{el:'earth',tier:1,move:[0,1]},{el:'air',tier:1,move:[-1,-1]},{el:'water',tier:2,move:[0,-2]}] },
+  // Custom cards
+  Phoenix:  { color:'#e91e8c', custom:true,
+    moves:[[2,0],[0,2],[0,-2],[-2,0]],
+    elMoves:[{el:'water',tier:1,move:[3,0]},{el:'fire',tier:1,move:[1,1]},{el:'earth',tier:1,move:[1,-1]},{el:'air',tier:2,move:[-1,0]},{el:'earth',tier:3,move:[0,3]},{el:'earth',tier:3,move:[0,-3]}] },
+  Serpent:  { color:'#27ae60', custom:true,
+    moves:[[3,0],[0,-1],[0,1]],
+    elMoves:[{el:'water',tier:1,move:[4,0]},{el:'earth',tier:1,move:[-1,0]},{el:'fire',tier:2,move:[2,-1]},{el:'fire',tier:2,move:[2,1]}] },
+  Storm:    { color:'#3498db', custom:true,
+    moves:[[1,1],[1,-1],[2,0],[-1,0]],
+    elMoves:[{el:'fire',tier:1,move:[2,1]},{el:'fire',tier:1,move:[2,-1]},{el:'air',tier:2,move:[-2,0]},{el:'water',tier:2,move:[3,0]}] },
+  Kirin:    { color:'#f39c12', custom:true,
+    moves:[[2,1],[2,-1],[-1,1],[-1,-1]],
+    elMoves:[{el:'fire',tier:1,move:[1,0]},{el:'water',tier:2,move:[3,1]},{el:'water',tier:2,move:[3,-1]},{el:'water',tier:3,move:[-2,0]}] },
+  Viper:    { color:'#9b59b6', custom:true,
+    moves:[[1,0],[1,2],[-1,-2]],
+    elMoves:[{el:'earth',tier:1,move:[0,1]},{el:'fire',tier:1,move:[2,2]},{el:'air',tier:2,move:[-2,0]},{el:'water',tier:2,move:[2,0]}] },
+  Lotus:    { color:'#e74c3c', custom:true,
+    moves:[[0,2],[0,-2],[2,0],[-2,0],[1,1],[-1,-1]],
+    elMoves:[{el:'water',tier:1,move:[3,0]},{el:'water',tier:1,move:[-3,0]},{el:'air',tier:2,move:[1,-1]},{el:'air',tier:2,move:[-1,1]},{el:'fire',tier:3,move:[2,-1]},{el:'fire',tier:3,move:[2,1]}] },
+};
+
+const ALL_CARDS = Object.keys(CARD_DEFS);
+
+// ── PLAYER DEFINITIONS ─────────────────────────────────────
+const PLAYER_DEF = {
+  2:[
+    {name:'Player 1',color:'#e74c3c',facing:[-1,0],throne:[10,5]},
+    {name:'Player 2',color:'#3498db',facing:[1,0], throne:[0,5]},
+  ],
+  4:[
+    {name:'Player 1',color:'#e74c3c',facing:[-1,0],throne:[10,5]},
+    {name:'Player 2',color:'#27ae60',facing:[0,-1],throne:[5,10]},
+    {name:'Player 3',color:'#3498db',facing:[1,0], throne:[0,5]},
+    {name:'Player 4',color:'#f39c12',facing:[0,1], throne:[5,0]},
+  ],
+};
+
+// Leader abilities — activate by entering central zone, one use then cooldown (own-turns)
+const LEADER_ABILITIES = [
+  {name:"Warlord's Surge", desc:"Move 2 pieces this turn",                    effect:'surge',        cooldown:3},
+  {name:"Soul Summon",      desc:"Spawn a pawn adjacent to your leader",       effect:'summon',       cooldown:4},
+  {name:"Warden's Shield",  desc:"Shield all pieces on resource tiles for this turn", effect:'wardenshield', cooldown:3},
+  {name:"Leader's Leap",    desc:"Your leader may move twice this turn",       effect:'leap',         cooldown:4},
+];
+
+// ── GAME STATE ─────────────────────────────────────────────
+let G = null;
+
+function newGame(cfg) {
+  const n  = cfg.numPlayers;
+  const tm = cfg.teamMode && n===4;
+
+  const players = PLAYER_DEF[n].map((def,i) => ({
+    id:i, name:cfg.names[i]||def.name, color:def.color,
+    facing:def.facing, throne:def.throne,
+    type: cfg.types[i]||'human',
+    team: tm?(i%2):i,
+    cards:[],
+    resources:{fire:0,water:0,earth:0,air:0},
+    tiers:{fire:0,water:0,earth:0,air:0},
+    shielded: new Set(),     // "r,c" → shielded positions this turn
+    ability: LEADER_ABILITIES[i%4],
+    abilityCooldown:0,   // 0 = ready; >0 = own-turns remaining before ready
+    eliminated:false,
+  }));
+
+  const board = Array.from({length:BOARD},()=>Array(BOARD).fill(null));
+  if (n===2) {
+    placeRow(board,0,10,[3,4,5,6,7],5);
+    placeRow(board,1,0, [3,4,5,6,7],5);
+  } else {
+    placeRow(board,0,10,[3,4,5,6,7],5);
+    placeCol(board,1,10,[3,4,5,6,7],5);
+    placeRow(board,2,0, [3,4,5,6,7],5);
+    placeCol(board,3,0, [3,4,5,6,7],5);
+  }
+
+  const deck = shuffle([...ALL_CARDS]);
+  players.forEach(p=>{ p.cards=[deck.pop(),deck.pop()]; });
+  const rotation = n===2?[deck.pop()]:[deck.pop(),deck.pop(),deck.pop(),deck.pop()];
+
+  G = {
+    board, players, n, teamMode:tm, rotation,
+    cur:0, turn:1, phase:'playing', winner:null,
+    selected:null, validMoves:[], selCard:null,
+    bonusMovesLeft:0,  // for surge
+    leapUsed:false,    // leader already moved once this turn (for leap)
+    summonMode:false,  // waiting for cell click to summon pawn
+    gustMode:false,    // air T3: waiting for 1-step bonus move
+    log:[],
+  };
+
+  log(`Game started — ${players[0].name} goes first.`);
+  render();
+  scheduleAI();
+}
+
+function placeRow(board,pid,row,cols,leaderCol){
+  cols.forEach(c=>{ board[row][c]={player:pid,isLeader:c===leaderCol,shield:false}; });
+}
+function placeCol(board,pid,col,rows,leaderRow){
+  rows.forEach(r=>{ board[r][col]={player:pid,isLeader:r===leaderRow,shield:false}; });
+}
+
+// ── TRANSFORMS ─────────────────────────────────────────────
+function transformMove(move, facing) {
+  const [r,c]=[move[0],move[1]],[fr,fc]=[facing[0],facing[1]];
+  if(fr===-1&&fc=== 0) return[-r, c];
+  if(fr=== 1&&fc=== 0) return[ r,-c];
+  if(fr=== 0&&fc=== 1) return[ c, r];
+  if(fr=== 0&&fc===-1) return[-c,-r];
+  return[r,c];
+}
+
+// ── CARD MOVES ─────────────────────────────────────────────
+function getCardMoves(row, col, cardName) {
+  const piece=G.board[row][col]; if(!piece) return[];
+  const player=G.players[piece.player];
+  const card=CARD_DEFS[cardName];
+  const seen=new Map();
+
+  const tryAdd=(nr,nc,elType='base',elTier=0)=>{
+    if(nr<0||nr>=BOARD||nc<0||nc>=BOARD) return;
+    if(BLOCKED.has(`${nr},${nc}`)) return;
+    if(G.board[nr][nc]?.player===piece.player) return;
+    if(!seen.has(`${nr},${nc}`)) seen.set(`${nr},${nc}`,{row:nr,col:nc,elType,elTier});
+  };
+
+  card.moves.forEach(m=>{ const[dr,dc]=transformMove(m,player.facing); tryAdd(row+dr,col+dc,'base',0); });
+
+  (card.elMoves||[]).forEach(({el,tier,move})=>{
+    if(player.tiers[el]>=tier){
+      const[dr,dc]=transformMove(move,player.facing);
+      tryAdd(row+dr,col+dc,el,tier);
+    }
+  });
+
+  return [...seen.values()];
+}
+
+// ── RESOURCE COLLECTION ────────────────────────────────────
+// Called at turn start — awards 1 token per piece already sitting on a resource tile
+function collectResources(pid) {
+  const player=G.players[pid];
+  if(player.eliminated) return;
+  for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+    const p=G.board[r][c];
+    if(p?.player===pid && RES_MAP[`${r},${c}`]){
+      const el=RES_MAP[`${r},${c}`];
+      player.resources[el]++;
+      checkTierUp(pid,el);
+    }
+  }
+}
+
+// Called immediately when a piece lands on a resource tile
+function collectLanding(pid,r,c){
+  const el=RES_MAP[`${r},${c}`];
+  if(!el) return;
+  const player=G.players[pid];
+  player.resources[el]++;
+  checkTierUp(pid,el);
+  log(`${player.name} collected 1 ${el} token on landing.`);
+}
+
+function checkTierUp(pid,el){
+  const player=G.players[pid];
+  const total=player.resources[el];
+  const newTier=TIER_AT.filter(t=>total>=t).length; // 0,1,2,3
+  if(newTier>player.tiers[el]){
+    player.tiers[el]=newTier;
+    log(`⚡ ${player.name} reached ${ELEM_ICON[el]} ${el} Tier ${newTier}!`);
+    showNotif(`${player.name}: ${ELEM_ICON[el]} ${el.toUpperCase()} Tier ${newTier}!`,ELEM_COLOR[el]);
+  }
+}
+
+// ── WARDEN SHIELD APPLICATION ──────────────────────────────
+function applyWardenShields(pid){
+  const player=G.players[pid];
+  if(player.eliminated) return;
+  let count=0;
+  for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+    const p=G.board[r][c];
+    if(p?.player===pid && RES_MAP[`${r},${c}`]){ p.shield=true; count++; }
+  }
+  if(count) log(`🛡 ${player.name} shielded ${count} piece(s) on resource tiles.`);
+}
+
+// ── INTERACTION ────────────────────────────────────────────
+function onCellClick(r,c){
+  if(G.phase!=='playing') return;
+  const cur=G.players[G.cur];
+  if(cur.type!=='human') return;
+
+  // Summon mode
+  if(G.summonMode){ handleSummonClick(r,c); return; }
+
+  // Gust step mode (air T3 bonus move) — only for human player
+  if(G.gustMode&&G.players[G.gustPid].type==='human'){ handleGustClick(r,c); return; }
+
+  // Complete move
+  if(G.selected&&G.selCard){
+    const hit=G.validMoves.find(m=>m.row===r&&m.col===c);
+    if(hit){ doMove(G.selected.row,G.selected.col,r,c,G.selCard,hit.elType,hit.elTier); return; }
+  }
+
+  const piece=G.board[r][c];
+
+  // Leap: after leader's first move this turn, only leader can move again
+  if(cur.ability.effect==='leap'&&G.leapUsed){
+    if(piece?.player===G.cur&&piece.isLeader){
+      G.selected={row:r,col:c};
+      G.validMoves=G.selCard?getCardMoves(r,c,G.selCard):[];
+      render(); return;
+    }
+    if(piece?.player===G.cur&&!piece.isLeader){ return; } // non-leader not allowed on second move
+  }
+
+  if(piece?.player===G.cur){
+    G.selected={row:r,col:c};
+    G.validMoves=G.selCard?getCardMoves(r,c,G.selCard):[];
+    render(); return;
+  }
+
+  G.selected=null; G.validMoves=[]; render();
+}
+
+function onCardClick(cardName){
+  if(G.phase!=='playing') return;
+  if(G.players[G.cur].type!=='human') return;
+  if(!G.players[G.cur].cards.includes(cardName)) return;
+  G.selCard=cardName;
+  G.validMoves=G.selected?getCardMoves(G.selected.row,G.selected.col,cardName):[];
+  render();
+}
+
+// ── MOVE EXECUTION ─────────────────────────────────────────
+function doMove(fr,fc,tr,tc,cardName,elType='base',elTier=0){
+  const piece=G.board[fr][fc];
+  const target=G.board[tr][tc];
+  const player=G.players[piece.player];
+
+  // Shield blocks capture
+  if(target?.shield){
+    target.shield=false;
+    log(`🛡 ${G.players[target.player].name}'s shielded piece survived!`);
+    rotateCard(piece.player,cardName);
+    clearSelection();
+    finaliseAfterMove(piece.player,fr,fc,false);
+    return;
+  }
+
+  let capturedLeader=false;
+  if(target?.isLeader) capturedLeader=true;
+
+  G.board[tr][tc]=piece;
+  G.board[fr][fc]=null;
+
+  // Landing resource bonus
+  collectLanding(piece.player,tr,tc);
+
+  // Leader enters central zone
+  if(piece.isLeader&&CENTER_ZONE.has(`${tr},${tc}`)&&!player.abilityUsed){
+    activateLeaderAbility(piece.player,tr,tc);
+  }
+
+  // Throne win (2P)
+  if(G.n===2&&piece.isLeader){
+    const opp=G.players[1-piece.player];
+    if(tr===opp.throne[0]&&tc===opp.throne[1]){
+      rotateCard(piece.player,cardName);
+      clearSelection();
+      declareWinner(piece.player,'Throne captured!');
+      render(); return;
+    }
+  }
+
+  if(capturedLeader){
+    log(`${player.name} captured ${G.players[target.player].name}'s leader!`);
+    eliminatePlayer(target.player);
+    if(checkWin()){ rotateCard(piece.player,cardName); clearSelection(); render(); return; }
+  }
+
+  rotateCard(piece.player,cardName);
+  clearSelection();
+  applyTier3Effect(piece.player,elType,elTier,tr,tc,!!target,piece.isLeader);
+  if(G.gustMode) return; // gust suspends turn advancement until bonus step taken
+  finaliseAfterMove(piece.player,fr,fc,true,piece.isLeader,tr,tc);
+}
+
+function finaliseAfterMove(pid,fr,fc,moved,isLeader,tr,tc){
+  const player=G.players[pid];
+
+  // Surge: allow bonus move
+  if(G.bonusMovesLeft>0){
+    G.bonusMovesLeft--;
+    render();
+    log(`${player.name} has ${G.bonusMovesLeft+1} bonus move(s) left.`);
+    if(player.type!=='human') setTimeout(doAI,500);
+    return;
+  }
+
+  // Leap: allow leader second move (set when ability fires, cleared by advanceTurn)
+  if(isLeader&&player.ability.effect==='leap'&&!G.leapUsed&&player.abilityCooldown===player.ability.cooldown){
+    G.leapUsed=true;
+    render();
+    log(`${player.name}'s leader may leap again!`);
+    if(player.type!=='human') setTimeout(doAI,500);
+    return;
+  }
+
+  G.leapUsed=false;
+  advanceTurn();
+  render();
+  scheduleAI();
+}
+
+// ── TIER 3 ELEMENTAL EFFECTS ───────────────────────────────
+function applyTier3Effect(pid,elType,elTier,tr,tc,wasCapture,isLeader){
+  if(elTier<3||elType==='base') return;
+  const player=G.players[pid];
+  const piece=G.board[tr][tc];
+  if(!piece) return;
+
+  if(elType==='fire'&&wasCapture){
+    // Searing Strike: capturing with fire shields the attacker
+    piece.shield=true;
+    log(`🔥 Searing Strike! ${player.name}'s piece is shielded by the blaze.`);
+
+  } else if(elType==='water'){
+    // Tidal Recall: spawn a pawn at starting edge if fewer pieces than start count
+    const startCount=5;
+    let onBoard=0;
+    for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++) if(G.board[r][c]?.player===pid) onBoard++;
+    if(onBoard<startCount){
+      const [thr,thc]=player.throne;
+      // Try throne cell first, then scan the starting row/col for an empty cell
+      const candidates=[];
+      if(player.facing[0]!==0){ // N/S player — scan starting row
+        const row=thr;
+        for(let c=2;c<=8;c++) candidates.push([row,c]);
+      } else { // E/W player — scan starting col
+        const col=thc;
+        for(let r=2;r<=8;r++) candidates.push([r,col]);
+      }
+      candidates.sort((a,b)=>(Math.abs(a[0]-thr)+Math.abs(a[1]-thc))-(Math.abs(b[0]-thr)+Math.abs(b[1]-thc)));
+      const spawn=candidates.find(([r,c])=>!G.board[r][c]&&!BLOCKED.has(`${r},${c}`));
+      if(spawn){
+        G.board[spawn[0]][spawn[1]]={player:pid,isLeader:false,shield:false};
+        log(`💧 Tidal Recall! ${player.name} summons a pawn to their base.`);
+      }
+    }
+
+  } else if(elType==='earth'){
+    // Stone Bastion: shield moved piece + adjacent friendlies
+    piece.shield=true;
+    let count=1;
+    [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{
+      const p=G.board[tr+dr]?.[tc+dc];
+      if(p?.player===pid&&!p.shield){ p.shield=true; count++; }
+    });
+    log(`🌿 Stone Bastion! ${player.name} fortifies ${count} piece(s).`);
+
+  } else if(elType==='air'){
+    // Gust Step: bonus 1-step orthogonal move to any empty cell
+    G.gustMode=true;
+    G.gustPid=pid;
+    G.selected=null; G.validMoves=[];
+    log(`💨 Gust Step! ${player.name} may move any piece one step to an empty cell.`);
+    render();
+  }
+}
+
+// Gust mode: player selects any piece then an adjacent empty cell
+function enterGustPieceSelect(r,c){
+  const pid=G.gustPid;
+  if(G.board[r][c]?.player!==pid) return;
+  const moves=[];
+  [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{
+    const nr=r+dr,nc=c+dc;
+    if(nr>=0&&nr<BOARD&&nc>=0&&nc<BOARD&&!G.board[nr][nc]&&!BLOCKED.has(`${nr},${nc}`))
+      moves.push({row:nr,col:nc});
+  });
+  if(!moves.length) return;
+  G.selected={row:r,col:c};
+  G.validMoves=moves;
+  render();
+}
+
+function handleGustClick(r,c){
+  const pid=G.gustPid;
+  // If clicking a valid destination
+  const hit=G.validMoves.find(m=>m.row===r&&m.col===c);
+  if(hit&&G.selected){
+    G.board[r][c]=G.board[G.selected.row][G.selected.col];
+    G.board[G.selected.row][G.selected.col]=null;
+    G.gustMode=false; G.gustPid=undefined;
+    G.selected=null; G.validMoves=[];
+    log(`💨 Gust Step used.`);
+    // Find the player whose turn it was (gustPid was set before clearing)
+    finaliseAfterMove(pid,r,c,true,false,r,c);
+    return;
+  }
+  // Otherwise try to select a new piece
+  enterGustPieceSelect(r,c);
+}
+
+function doGustAI(pid){
+  // Pick a random piece with valid gust destinations
+  const pieces=[];
+  for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+    if(G.board[r][c]?.player===pid){
+      const dests=[[-1,0],[1,0],[0,-1],[0,1]].map(([dr,dc])=>[r+dr,c+dc])
+        .filter(([nr,nc])=>nr>=0&&nr<BOARD&&nc>=0&&nc<BOARD&&!G.board[nr][nc]&&!BLOCKED.has(`${nr},${nc}`));
+      if(dests.length) pieces.push({r,c,dests});
+    }
+  }
+  if(pieces.length){
+    const pick=pieces[Math.floor(Math.random()*pieces.length)];
+    const dest=pick.dests[Math.floor(Math.random()*pick.dests.length)];
+    G.board[dest[0]][dest[1]]=G.board[pick.r][pick.c];
+    G.board[pick.r][pick.c]=null;
+  }
+  G.gustMode=false; G.gustPid=undefined;
+  G.selected=null; G.validMoves=[];
+  finaliseAfterMove(pid,0,0,true,false,0,0);
+}
+
+function rotateCard(pid,cardName){
+  const player=G.players[pid];
+  const idx=player.cards.indexOf(cardName);
+  if(G.n===2){
+    const c=G.rotation[0]; G.rotation[0]=cardName; player.cards[idx]=c;
+  } else {
+    const c=G.rotation.shift(); G.rotation.push(cardName); player.cards[idx]=c;
+  }
+}
+function clearSelection(){ G.selected=null; G.validMoves=[]; G.selCard=null; }
+
+// ── LEADER ABILITIES ───────────────────────────────────────
+function activateLeaderAbility(pid,leaderRow,leaderCol){
+  const player=G.players[pid];
+  if(player.abilityCooldown>0){
+    log(`${player.name}'s ${player.ability.name} is on cooldown — ${player.abilityCooldown} turn(s) left.`);
+    return;
+  }
+  player.abilityCooldown=player.ability.cooldown;
+  log(`⚡ ${player.name} activated: ${player.ability.name}! (cooldown: ${player.ability.cooldown} turns)`);
+  showNotif(`${player.name}: ${player.ability.name}\n${player.ability.desc}`,player.color);
+
+  if(player.ability.effect==='summon'){
+    if(player.type==='human'){
+      enterSummonMode(pid,leaderRow,leaderCol);
+    } else {
+      // AI auto-picks the closest empty adjacent cell to place a pawn
+      const candidates=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
+        .map(([dr,dc])=>[leaderRow+dr,leaderCol+dc])
+        .filter(([r,c])=>r>=0&&r<BOARD&&c>=0&&c<BOARD&&!G.board[r][c]&&!BLOCKED.has(`${r},${c}`));
+      if(candidates.length){
+        const [sr,sc]=candidates[0];
+        G.board[sr][sc]={player:pid,isLeader:false,shield:false};
+        log(`${player.name} summoned a pawn adjacent to their leader.`);
+      }
+    }
+  } else if(player.ability.effect==='surge'){
+    G.bonusMovesLeft=1;
+  } else if(player.ability.effect==='wardenshield'){
+    applyWardenShields(pid);
+  } else if(player.ability.effect==='leap'){
+    G.leapUsed=false; // leader gets a second move this turn
+  }
+}
+
+function enterSummonMode(pid,lr,lc){
+  G.summonMode=true;
+  const overlay=document.getElementById('summon-overlay');
+  overlay.classList.remove('hidden');
+  overlay.classList.add('active');
+  // Highlight adjacent empty cells
+  G.validMoves=[];
+  [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>{
+    const nr=lr+dr,nc=lc+dc;
+    if(nr>=0&&nr<BOARD&&nc>=0&&nc<BOARD&&!G.board[nr][nc]){
+      G.validMoves.push({row:nr,col:nc});
+    }
+  });
+  render();
+}
+
+function handleSummonClick(r,c){
+  if(!G.validMoves.find(m=>m.row===r&&m.col===c)) return;
+  G.board[r][c]={player:G.cur,isLeader:false,shield:false};
+  G.summonMode=false;
+  G.validMoves=[];
+  document.getElementById('summon-overlay').classList.add('hidden');
+  document.getElementById('summon-overlay').classList.remove('active');
+  log(`${G.players[G.cur].name} summoned a pawn!`);
+  render();
+}
+
+// ── TURN MANAGEMENT ────────────────────────────────────────
+function advanceTurn(){
+  let next=(G.cur+1)%G.n;
+  let tries=0;
+  while(G.players[next].eliminated&&tries++<G.n) next=(next+1)%G.n;
+  G.cur=next;
+  G.turn++;
+  G.leapUsed=false;
+  G.bonusMovesLeft=0;
+
+  const np=G.players[G.cur];
+  // Tick down this player's own-turn cooldown
+  if(np.abilityCooldown>0) np.abilityCooldown--;
+
+  collectResources(G.cur);
+  log(`Turn ${G.turn}: ${np.name}'s move.`);
+}
+
+// ── ELIMINATE / WIN ────────────────────────────────────────
+function eliminatePlayer(pid){
+  G.players[pid].eliminated=true;
+  for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+    if(G.board[r][c]?.player===pid) G.board[r][c]=null;
+  }
+  log(`${G.players[pid].name} eliminated!`);
+}
+
+function checkWin(){
+  const active=G.players.filter(p=>!p.eliminated);
+  if(G.teamMode){
+    const teams={};
+    active.forEach(p=>{ teams[p.team]=(teams[p.team]||0)+1; });
+    const at=Object.keys(teams);
+    if(at.length===1){ declareWinner(parseInt(at[0]),'Last team standing!',true); return true; }
+  } else {
+    if(active.length===1){ declareWinner(active[0].id,'Last leader standing!'); return true; }
+  }
+  return false;
+}
+
+function declareWinner(idx,reason,isTeam=false){
+  G.phase='ended';
+  let msg;
+  if(isTeam){ const m=G.players.filter(p=>p.team===idx); msg=`${m.map(p=>p.name).join(' & ')} win!\n${reason}`; }
+  else { msg=`${G.players[idx].name} wins!\n${reason}`; }
+  log(msg);
+  setTimeout(()=>{ document.getElementById('win-message').textContent=msg;
+    document.getElementById('win-modal').classList.remove('hidden'); },400);
+}
+
+// ── AI ─────────────────────────────────────────────────────
+function scheduleAI(){
+  if(!G||G.phase!=='playing') return;
+  if(G.players[G.cur].type==='human') return;
+  setTimeout(doAI,700);
+}
+
+function doAI(){
+  if(!G||G.phase!=='playing') return;
+  const cp=G.players[G.cur];
+  if(cp.type==='human') return;
+
+  const moves=allMoves(G.cur);
+  if(!moves.length){ advanceTurn(); render(); scheduleAI(); return; }
+
+  let chosen;
+  if(cp.type==='ai-easy') chosen=moves[Math.floor(Math.random()*moves.length)];
+  else chosen=bestMove(moves);
+
+  G.selCard=chosen.card; G.selected={row:chosen.fr,col:chosen.fc};
+  G.validMoves=[{row:chosen.tr,col:chosen.tc}];
+  render();
+  setTimeout(()=>{
+    doMove(chosen.fr,chosen.fc,chosen.tr,chosen.tc,chosen.card,chosen.elType,chosen.elTier);
+    if(G.gustMode) setTimeout(()=>doGustAI(G.gustPid),400);
+  },350);
+}
+
+function allMoves(pid){
+  const moves=[];
+  G.players[pid].cards.forEach(card=>{
+    for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+      if(G.board[r][c]?.player===pid){
+        getCardMoves(r,c,card).forEach(m=>moves.push({fr:r,fc:c,tr:m.row,tc:m.col,card,elType:m.elType,elTier:m.elTier}));
+      }
+    }
+  });
+  return moves;
+}
+
+function bestMove(moves){
+  const scored=moves.map(m=>{
+    let s=0;
+    const t=G.board[m.tr][m.tc];
+    if(t){ s+=t.isLeader?1000:15; }
+    if(G.n===2){ const opp=G.players[1-G.cur];
+      if(G.board[m.fr][m.fc]?.isLeader&&m.tr===opp.throne[0]&&m.tc===opp.throne[1]) s+=2000; }
+    if(G.board[m.fr][m.fc]?.isLeader&&CENTER_ZONE.has(`${m.tr},${m.tc}`)) s+=40;
+    if(RES_MAP[`${m.tr},${m.tc}`]) s+=8;
+    s+=(10-Math.abs(m.tr-5)-Math.abs(m.tc-5));
+    return{...m,s};
+  });
+  scored.sort((a,b)=>b.s-a.s);
+  const top=scored.slice(0,Math.min(3,scored.length));
+  return top[Math.floor(Math.random()*top.length)];
+}
+
+// ── RENDER ─────────────────────────────────────────────────
+function makePieceSVG(color, isLeader) {
+  const sk='rgba(0,0,0,.38)', hi='rgba(255,255,255,.28)';
+  if(isLeader) return `<svg viewBox="0 0 24 34" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+    <circle cx="12" cy="9" r="5.8" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <ellipse cx="12" cy="6.5" rx="2.8" ry="1.4" fill="${hi}"/>
+    <circle cx="12" cy="9" r="3.2" fill="none" stroke="${hi}" stroke-width="1.2" opacity=".7"/>
+    <path d="M9,14.5 C8.4,16.5 8,18.5 7.5,20 L16.5,20 C16,18.5 15.6,16.5 15,14.5 Z" fill="${color}" stroke="${sk}" stroke-width=".8"/>
+    <rect x="6" y="20" width="12" height="5.5" rx="1.5" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <rect x="4" y="25.5" width="16" height="5" rx="2.5" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <rect x="4" y="25.5" width="16" height="2" rx="2.5" fill="${hi}" opacity=".45"/>
+  </svg>`;
+  return `<svg viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+    <circle cx="12" cy="7.5" r="5" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <ellipse cx="12" cy="5.5" rx="2.4" ry="1.2" fill="${hi}"/>
+    <path d="M9.5,12.5 C9,14 8.5,16 8,17.5 L16,17.5 C15.5,16 15,14 14.5,12.5 Z" fill="${color}" stroke="${sk}" stroke-width=".8"/>
+    <rect x="6" y="17.5" width="12" height="5" rx="1.5" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <rect x="4" y="22.5" width="16" height="4.5" rx="2" fill="${color}" stroke="${sk}" stroke-width="1.2"/>
+    <rect x="4" y="22.5" width="16" height="1.8" rx="2" fill="${hi}" opacity=".45"/>
+  </svg>`;
+}
+
+function render(){ renderBoard(); renderPlayers(); renderCards(); renderStatus(); }
+
+function renderBoard(){
+  const el=document.getElementById('board');
+  const wrap=document.getElementById('board-wrap');
+  const size=Math.min(wrap.clientWidth,wrap.clientHeight)-20;
+  el.style.width=size+'px'; el.style.height=size+'px';
+  el.innerHTML='';
+
+  for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+    if(BLOCKED.has(`${r},${c}`)){ const v=document.createElement('div'); v.className='cell cell-void'; el.appendChild(v); continue; }
+    const cell=document.createElement('div');
+    cell.className='cell '+((r+c)%2===0?'cell-light':'cell-dark');
+    if(CENTER_ZONE.has(`${r},${c}`)) cell.classList.add('center-zone');
+    if(r===5&&c===5) cell.classList.add('center-point');
+    const res=RES_MAP[`${r},${c}`];
+    if(res){ cell.classList.add(`resource-${res}`);
+      const ic=document.createElement('div'); ic.className='resource-icon'; ic.textContent=ELEM_ICON[res]; cell.appendChild(ic); }
+    if(G) G.players.forEach(p=>{
+      if(!p.eliminated&&p.throne[0]===r&&p.throne[1]===c){
+        const t=document.createElement('div'); t.className='throne-marker'; t.style.color=p.color; cell.appendChild(t); }
+    });
+    const piece=G?.board[r][c];
+    if(piece){
+      const pe=document.createElement('div');
+      pe.className='piece-wrap'+(piece.isLeader?' leader':'')+(piece.shield?' shielded':'');
+      pe.style.color=G.players[piece.player].color;
+      pe.innerHTML=makePieceSVG(G.players[piece.player].color,piece.isLeader);
+      cell.appendChild(pe);
+    }
+    if(G?.selected?.row===r&&G?.selected?.col===c) cell.classList.add('selected');
+    if(G?.validMoves?.some(m=>m.row===r&&m.col===c)) cell.classList.add(G.board[r][c]?'valid-capture':'valid-move');
+    cell.addEventListener('click',()=>onCellClick(r,c));
+    el.appendChild(cell);
+  }
+}
+
+function renderPlayers(){
+  if(!G) return;
+  const panel=document.getElementById('player-panels');
+  panel.innerHTML='';
+  G.players.forEach((p,i)=>{
+    let pieces=0,leaderAlive=false;
+    for(let r=0;r<BOARD;r++) for(let c=0;c<BOARD;c++){
+      const pc=G.board[r][c]; if(pc?.player===i){ pieces++; if(pc.isLeader) leaderAlive=true; }
+    }
+    const div=document.createElement('div');
+    div.className='player-panel'+(i===G.cur&&!p.eliminated?' active':'')+(p.eliminated?' eliminated':'');
+    div.style.borderColor=p.color;
+
+    const elBadges=ELEMENTS.map(el=>{
+      const tier=p.tiers[el]; const total=p.resources[el];
+      const nextAt=TIER_AT[tier]||'MAX';
+      const cls=tier>0?`el-badge t${tier}`:'el-badge';
+      return `<span class="${cls}" title="${el}: ${total} tokens, Tier ${tier}${tier<3?' (next: '+nextAt+')':' MAX'}">${ELEM_ICON[el]}${tier>0?tier:''} <small>${total}</small></span>`;
+    }).join('');
+
+    const abilLine=p.abilityCooldown>0
+      ?`<div class="leader-ability-badge" style="color:var(--text-dim)">⏳${p.ability.name}(${p.abilityCooldown})</div>`
+      :`<div class="leader-ability-badge">⚡${p.ability.name} ready</div>`;
+    const elimLine=p.eliminated?'<div class="eliminated-badge">ELIMINATED</div>':'';
+
+    div.innerHTML=`
+      <div class="player-name" style="color:${p.color}">${p.type!=='human'?'🤖':''}${p.name}</div>
+      <div class="player-pieces">Pieces:${pieces} ${leaderAlive?'★':'<span style="color:#e74c3c">✗</span>'}</div>
+      <div class="player-elements">${elBadges}</div>${abilLine}${elimLine}`;
+    panel.appendChild(div);
+  });
+}
+
+function renderCards(){
+  if(!G) return;
+  const cp=G.players[G.cur];
+  const el=document.getElementById('cards-area');
+  el.innerHTML=`<div class="cards-label">${cp.name}'s Cards</div>`;
+  const RAD=CARD_GRID_RAD;
+  const GS=RAD*2+1;
+
+  cp.cards.forEach(name=>{
+    const def=CARD_DEFS[name];
+    const card=document.createElement('div');
+    card.className='card'+(G.selCard===name?' card-selected':'')+(cp.type!=='human'?' card-disabled':'');
+    card.style.borderColor=def.color;
+    if(def.custom) card.style.background='linear-gradient(135deg,#1a1a2e,#0d0d1a)';
+
+    // Build move map for this card in display space
+    const moveMap=new Map(); // "dr,dc" → {type:'normal'|'el', el?, tier?}
+
+    def.moves.forEach(m=>{
+      const[dr,dc]=transformMove(m,cp.facing);
+      if(!moveMap.has(`${dr},${dc}`)) moveMap.set(`${dr},${dc}`,{type:'normal'});
+    });
+
+    (def.elMoves||[]).forEach(({el,tier,move})=>{
+      const[dr,dc]=transformMove(move,cp.facing);
+      const key=`${dr},${dc}`;
+      if(!moveMap.has(key)){
+        moveMap.set(key,{type:'el',el,tier});
+      }
+    });
+
+    // Element tag summary
+    const elPresent=new Map(); // el → max tier shown
+    (def.elMoves||[]).forEach(({el,tier})=>{
+      if(!elPresent.has(el)||elPresent.get(el)<tier) elPresent.set(el,tier);
+    });
+    const tagHTML=[...elPresent.entries()].map(([el,tier])=>{
+      const unlocked=cp.tiers[el]>=tier;
+      return `<span class="card-el-tag ${unlocked?el:'locked'}" title="${el} tier ${tier}${unlocked?'':" (locked)"}">${ELEM_ICON[el]}${tier}</span>`;
+    }).join('');
+
+    card.innerHTML=`<div class="card-header"><div class="card-name">${name}${def.custom?' ✨':''}</div><div class="card-el-tags">${tagHTML}</div></div>`;
+
+    // Grid
+    const grid=document.createElement('div');
+    grid.className='card-grid';
+    grid.style.gridTemplateColumns=`repeat(${GS},1fr)`;
+
+    for(let gr=0;gr<GS;gr++) for(let gc=0;gc<GS;gc++){
+      const dr=gr-RAD,dc=gc-RAD;
+      const gcell=document.createElement('div');
+      gcell.className='card-cell';
+      if(dr===0&&dc===0){
+        gcell.classList.add('cc-origin'); gcell.textContent='◎';
+      } else {
+        const info=moveMap.get(`${dr},${dc}`);
+        if(info){
+          if(info.type==='normal'){ gcell.classList.add('cc-normal'); gcell.textContent='●'; }
+          else {
+            const unlocked=cp.tiers[info.el]>=info.tier;
+            if(unlocked){ gcell.classList.add(`cc-${info.el}`); gcell.textContent='●'; }
+            else { gcell.classList.add('cc-locked'); gcell.textContent=`${info.tier}`; gcell.title=`${ELEM_ICON[info.el]} tier ${info.tier} required`; }
+          }
+        } else { gcell.classList.add('cc-empty'); }
+      }
+      grid.appendChild(gcell);
+    }
+    card.appendChild(grid);
+    if(cp.type==='human') card.addEventListener('click',()=>onCardClick(name));
+    el.appendChild(card);
+  });
+
+  const rotDiv=document.createElement('div');
+  rotDiv.className='rotation-label';
+  rotDiv.innerHTML=`Rotation: ${G.rotation.map(n=>`<span style="color:${CARD_DEFS[n].color}">${n}</span>`).join(', ')}`;
+  el.appendChild(rotDiv);
+}
+
+function renderStatus(){
+  if(!G) return;
+  const el=document.getElementById('status-bar');
+  if(G.phase==='ended'){ el.textContent='Game over!'; return; }
+  if(G.summonMode){ el.textContent='Click an adjacent empty cell to summon your pawn'; return; }
+  const cp=G.players[G.cur];
+  let s=`Turn ${G.turn}: ${cp.name}`;
+  if(G.gustMode&&G.players[G.gustPid].type==='human'){
+    s=`💨 Gust Step — ${G.players[G.gustPid].name}: ${G.selected?'select a destination (empty cell)':'select a piece to move one step'}`;
+  } else if(cp.type!=='human') s+=' (AI…)';
+  else if(!G.selCard) s+=' — select a card';
+  else if(!G.selected) s+=' — select a piece';
+  else s+=' — select a destination';
+  if(G.bonusMovesLeft>0) s+=` | ⚡ Surge: ${G.bonusMovesLeft} bonus move(s) left`;
+  if(G.leapUsed) s+=' | 🦘 Leap: move your leader again';
+  el.textContent=s;
+}
+
+// ── LOG & NOTIF ────────────────────────────────────────────
+function log(msg){
+  if(!G) return;
+  G.log.unshift(msg);
+  if(G.log.length>30) G.log.pop();
+  const el=document.getElementById('game-log');
+  el.innerHTML=G.log.map((l,i)=>`<div class="log-entry" style="${i?'opacity:.65':''}">${l}</div>`).join('');
+}
+
+function showNotif(msg,color='#fff'){
+  const n=document.createElement('div'); n.className='notification';
+  n.style.borderColor=color; n.style.color=color; n.textContent=msg;
+  document.body.appendChild(n);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>n.classList.add('show')));
+  setTimeout(()=>{ n.classList.remove('show'); setTimeout(()=>n.remove(),350); },3200);
+}
+
+// ── TUTORIAL ───────────────────────────────────────────────
+const TUTORIAL_STEPS=[
+  {title:'1 — The Board',html:`<p>An <strong>11×11 board</strong> with pieces for each player.</p><ul><li>★ = <strong>Leader</strong> — protect yours, capture theirs.</li><li>● = regular <strong>pawn</strong>.</li><li>Dashed border = a player's <strong>Throne</strong> (their leader's start square).</li></ul><p style="margin-top:10px;color:var(--gold)">Win: capture enemy leader <em>or</em> land your leader on their throne (2-player only).</p>`},
+  {title:'2 — Taking a Turn',html:`<p>Each turn is two clicks:</p><ol style="margin:10px 0 10px 16px;line-height:2.2"><li><strong>Click a card</strong> (right panel) to select it.</li><li><strong>Click one of your pieces</strong> — coloured cells show valid moves.</li><li><strong>Click a coloured cell</strong> to move. Red = captures.</li></ol><p>You can also click the piece first, then the card — either order works.</p>`},
+  {title:'3 — Reading a Card',html:`<p>The card grid shows all possible move squares from your piece's position (◎):</p><ul style="margin:10px 0 10px 16px;line-height:2.2"><li><span style="color:#5daa44">●</span> <strong>Green</strong> — always available.</li><li><span style="color:#3498db">●</span> <strong>Blue</strong> — Water element (need Water Tier shown on dot).</li><li><span style="color:#e74c3c">●</span> <strong>Red</strong> — Fire element.</li><li><span style="color:#5daa44">●</span> Muted green — Earth. <span style="color:#9b59b6">●</span> Purple — Air.</li><li>A small number on a dim cell = locked; shows the tier you need.</li></ul><p>Card header shows e.g. <strong>💧1 🔥2</strong> — element tiers present on that card.</p>`},
+  {title:'4 — Resource Tiles',html:`<p>Coloured tiles across the board are resource tiles (🔥💧🌿💨).</p><p style="margin-top:8px">At the <strong>start of your turn</strong>, each piece that was <em>already sitting on a resource tile last turn</em> earns 1 token. Two pieces on two same-element tiles = 2 tokens in one go.</p><p style="margin-top:8px">The first turn you arrive counts as "arrival" — tokens start flowing the <em>following</em> turn if you're still there.</p>`},
+  {title:'5 — Element Tiers',html:`<p>Collect tokens to unlock <strong>3 tiers</strong> per element:</p><ul style="margin:10px 0 10px 16px;line-height:2.2"><li><strong>Tier 1</strong> — 5 tokens</li><li><strong>Tier 2</strong> — 10 tokens (includes Tier 1)</li><li><strong>Tier 3</strong> — 17 tokens (all moves unlocked)</li></ul><p>Once you reach a tier, the matching coloured squares on your cards become usable. Other players still cannot use those squares even if they pick up the same card.</p>`},
+  {title:'6 — Leader Abilities',html:`<p>Move your <strong>Leader (★)</strong> into any cell of the <strong>central 3×3 golden zone</strong> to activate their unique one-time ability:</p><ul style="margin:10px 0 10px 16px;line-height:2.2"><li>🔴 <strong>Surge</strong> — move 2 pieces per turn for 3 turns.</li><li>🟢 <strong>Summon</strong> — instantly place a new pawn adjacent to your leader.</li><li>🔵 <strong>Warden's Shield</strong> — pieces on resource tiles start each turn shielded for 3 turns.</li><li>🟡 <strong>Leap</strong> — your leader may move twice per turn for 3 turns.</li></ul>`},
+  {title:'7 — Ready!',html:`<p>That covers the full ruleset. Quick checklist:</p><ul style="margin:10px 0 10px 16px;line-height:2.2"><li>Card → piece → destination.</li><li>Sit on resource tiles to earn element tokens.</li><li>Unlock tiers to use coloured card moves.</li><li>Rush your leader into the golden zone for your ability.</li><li>Capture the enemy leader or reach their throne to win.</li></ul><p style="color:var(--gold);margin-top:10px">Good luck! ⚔</p>`},
+];
+let tutIdx=0;
+function showTutorial(){ tutIdx=0; renderTutStep(); document.getElementById('tutorial-modal').classList.remove('hidden'); }
+function tutStep(d){ tutIdx=Math.max(0,Math.min(TUTORIAL_STEPS.length-1,tutIdx+d)); renderTutStep(); }
+function renderTutStep(){
+  const s=TUTORIAL_STEPS[tutIdx];
+  document.getElementById('tutorial-content').innerHTML=`<h3 style="color:var(--gold);margin-bottom:10px;font-size:15px">${s.title}</h3><div style="font-size:13px;line-height:1.75;color:var(--text-dim)">${s.html}</div>`;
+  document.getElementById('tut-counter').textContent=`Step ${tutIdx+1} of ${TUTORIAL_STEPS.length}`;
+  document.getElementById('tut-prev').disabled=tutIdx===0;
+  const nb=document.getElementById('tut-next');
+  if(tutIdx===TUTORIAL_STEPS.length-1){ nb.textContent='Close ✓'; nb.onclick=()=>document.getElementById('tutorial-modal').classList.add('hidden'); }
+  else { nb.textContent='Next →'; nb.onclick=()=>tutStep(1); }
+}
+
+// ── SETUP ─────────────────────────────────────────────────
+const COLORS=['#e74c3c','#27ae60','#3498db','#f39c12'];
+const DEFAULT_NAMES=['Player 1','Player 2','Player 3','Player 4'];
+
+function updateSetupForm(){
+  const n=parseInt(document.getElementById('player-count').value);
+  document.getElementById('team-mode-wrap').style.display=n===4?'block':'none';
+  const rows=document.getElementById('player-rows'); rows.innerHTML='';
+  for(let i=0;i<n;i++){
+    const row=document.createElement('div'); row.className='player-type-row';
+    row.innerHTML=`<div class="player-color-dot" style="background:${COLORS[i]}"></div>
+      <input class="player-name-input" id="pname-${i}" value="${DEFAULT_NAMES[i]}" maxlength="16">
+      <select id="ptype-${i}"><option value="human">Human</option><option value="ai-easy">AI Easy</option><option value="ai-medium">AI Medium</option><option value="ai-hard">AI Hard</option></select>`;
+    rows.appendChild(row);
+  }
+}
+
+function showSetupModal(){ updateSetupForm(); document.getElementById('setup-modal').classList.remove('hidden'); }
+function hideSetupModal(){ document.getElementById('setup-modal').classList.add('hidden'); }
+function showRulesModal(){ document.getElementById('rules-modal').classList.remove('hidden'); }
+
+function startGameFromModal(){
+  const n=parseInt(document.getElementById('player-count').value);
+  const teamMode=n===4&&document.getElementById('team-mode').checked;
+  const names=[],types=[];
+  for(let i=0;i<n;i++){
+    names.push(document.getElementById(`pname-${i}`)?.value||DEFAULT_NAMES[i]);
+    types.push(document.getElementById(`ptype-${i}`)?.value||'human');
+  }
+  hideSetupModal();
+  newGame({numPlayers:n,teamMode,names,types});
+}
+
+// ── UTILS ─────────────────────────────────────────────────
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+
+// ── BOOT ──────────────────────────────────────────────────
+window.addEventListener('load',()=>{ renderBoard(); showSetupModal(); });
+window.addEventListener('resize',()=>{ if(G) renderBoard(); });
+</script>
+</body>
+</html>
