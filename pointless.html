@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Button</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#f0ebe0; --surface:#e8dfc8; --border:#c4a46c;
+  --text:#2a1a08; --text-dim:#8a6535; --gold:#8b6200;
+}
+body {
+  background:var(--bg); color:var(--text);
+  font-family:'Segoe UI',system-ui,sans-serif;
+  height:100vh; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:24px;
+}
+h1 { color:#5c3215; letter-spacing:1px; }
+p  { color:var(--text-dim); max-width:320px; text-align:center; }
+#the-button {
+  font-size:22px; padding:18px 44px; border-radius:12px; cursor:pointer;
+  background:var(--surface); border:3px solid var(--border); color:var(--text);
+  box-shadow:0 4px 0 var(--border); transition:transform .05s, box-shadow .05s;
+}
+#the-button:hover:not(:disabled) { border-color:var(--gold); }
+#the-button:active:not(:disabled) { transform:translateY(4px); box-shadow:0 0 0 var(--border); }
+#the-button:disabled { cursor:default; opacity:.6; }
+#result { font-size:18px; color:var(--gold); min-height:1.4em; font-weight:700; }
+</style>
+</head>
+<body>
+<h1>The Button</h1>
+<p>A game of skill, strategy, and exactly one interaction. Press the button.</p>
+<button id="the-button">Press me</button>
+<div id="result"></div>
+<script>
+const button = document.getElementById('the-button');
+button.addEventListener('click', () => {
+  button.disabled = true;
+  button.textContent = 'Pressed';
+  document.getElementById('result').textContent = '🎉 You win! That was the whole game.';
+}, { once: true });
+</script>
+</body>
+</html>
